@@ -64,11 +64,11 @@ if __name__ == '__main__':
     errors = [str(i) for i in errors]
     
     # Write this to txt files
-    with open('./data/english_names.txt', 'w', encoding="utf-8") as f:
+    with open('./data/english_ids.txt', 'w', encoding="utf-8") as f:
         f.write(','.join(english))
 
-    with open('./data/non_english_names.txt', 'w', encoding="utf-8") as f:
+    with open('./data/non_english_ids.txt', 'w', encoding="utf-8") as f:
         f.write(','.join(non_english))
 
-    with open('./data/error_names.txt', 'w', encoding="utf-8") as f:
+    with open('./data/error_ids.txt', 'w', encoding="utf-8") as f:
         f.write(','.join(errors))
