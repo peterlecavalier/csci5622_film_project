@@ -11,8 +11,7 @@ imdb_ratings = []
 # These headers help with the requests
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36'}
 
-#TODO: Add budget/revenue scraping
-for id in tqdm(imdb_ids[100:]):
+for id in tqdm(imdb_ids):
     if not pd.isna(id):
         imdb_page = requests.get(f'https://www.imdb.com/title/{id}/', headers=headers)
         if not imdb_page.ok:
