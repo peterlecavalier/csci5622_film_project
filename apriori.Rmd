@@ -1,0 +1,102 @@
+---
+title: "Apriori - Film Data"
+author: "Peter LeCavalier"
+date: "2023-02-28"
+output: html_document
+---
+
+# Apriori
+
+Now we want to perform the Apriori algorithm on our data for Association Rule Mining (ARM). First, load in packages to work with Apriori:
+
+```{r}
+library(arules)
+library(arulesViz)
+```
+
+Our film data has a column `genres` that contains several different genres for each film. We can interpret this as transactional data, where one transaction is one movie, and each item in that transaction is a genre. Let's load in our data and look at these:
+
+```{r}
+loaded_df <- read.csv("./data/imdb_cleaned_data.csv")
+```
+
+```{r}
+loaded_genres <- loaded_df$genres
+head(loaded_genres)
+```
+
+Great! As we can see in the first few movies, there are lists of genres for each. However, some will have no genres listed (due to missing values in the dataset) as shown in the below example:
+
+```{r}
+loaded_genres[470]
+```
+
+Let's remove these:
+
+```{r}
+none_genres <- loaded_genres == "['None']"
+final_genres <- loaded_genres[!none_genres]
+```
+
+Great, now we have genres to make transaction data with. We need to reformat these in a format to save them to a CSV:
+
+```{r}
+# Solution from here: https://stackoverflow.com/a/11336664
+save_genres <- gsub("\\[|\\]|'| ", "", final_genres)
+```
+
+Perfect. Now we can write this to a CSV:
+
+```{r}
+write.csv(save_genres,"./data/genre_transaction.csv", quote=FALSE, row.names = FALSE)
+```
+
+Now we can load in this CSV as transaction data for use in Apriori:
+
+```{r}
+tr <- read.transactions("./data/genre_transaction.csv", format = 'basket', sep=',', header=TRUE)
+```
+
+```{r}
+summary(tr)
+```
+
+Great! As we can see from the summary, most of the movies have only 1 genre, but several have 2-8 as well. Let's run apriori on this with a minimum length of 2 (since we don't really care for 1-itemsets in this case, these are pretty apparent from the summary above):
+
+```{r}
+rule1 <- apriori(tr, parameter=list(support=0.0015, confidence=0.4, minlen=2))
+```
+
+Great! Now we can look at the first few rules:
+
+```{r}
+inspect(head(rule1, 5))
+```
+
+```{r}
+plot(rule1, method="grouped")
+```
+
+Additionally, we can look at the overall Confidence vs. Support on our rules:
+
+```{r}
+plot(rule1)
+```
+
+Now, let's look at the top 15 rules for support:
+
+```{r}
+inspect(head(sort(rule1, by="support"), 15))
+```
+
+...and for confidence:
+
+```{r}
+inspect(head(sort(rule1, by="confidence"), 15))
+```
+
+...and for lift!
+
+```{r}
+inspect(head(sort(rule1, by="lift"), 15))
+```

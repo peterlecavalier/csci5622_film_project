@@ -1,0 +1,234 @@
+---
+title: "Clustering - Film Data"
+author: "Peter LeCavalier"
+date: "2023-02-14"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+# Loading in Data
+
+Let's start by loading in our cleaned data from the tMDB and IMDB datasets:
+
+```{r}
+loaded_df <- read.csv("./data/nan_removed_cleaned_data.csv")
+summary(loaded_df)
+```
+
+With clustering, we only want unlabeled numeric data. Additionally, our previous data prep caused some columns to be duplicate representations of the same thing (for example, imdb_budget vs. combined_budget) For these reasons, we only care about the following columns: `popularity`, `revenue`, `runtime`, `vote_average`, `vote_count`, `log_popularity`, `title_length`, `num_languages`, `num_genres`, `imdb_rating`, `combined_budget`, `combined_revenue`. Let's make an updated dataframe with only these columns (plus our `genres` column, which we'll use to compare for clustering):
+
+```{r}
+df <- loaded_df[, c('popularity', 'runtime', 'vote_average', 'vote_count', 'title_length', 'num_languages', 'num_genres', 'imdb_rating', 'combined_budget', 'combined_revenue', 'genres', 'release_date')]
+```
+
+Perfect! Now we can prep our data for clustering.
+
+# Prepping data for clustering
+
+First, let's remove any `NA` values from our data.
+
+```{r}
+# Omit NAs from numeric columns
+df <- na.omit(df)
+
+# This deals with our release_date column
+film.datetimes <- as.Date(df$release_date, format='%Y-%m-%d')
+df_old <- df[-which(is.na(film.datetimes)),]
+```
+
+Next, we can randomly sample a subset of this data. Our original data is 13604 rows, but this will be too cumbersome an amount for clustering (especially hierarchical). Let's randomly sample down to 1500:
+
+```{r}
+set.seed(10)
+df <- df_old[sample(nrow(df_old), 1500),]
+```
+
+Now, let's extract the labels we want to cluster on. For this data, I want to see if we can use these numerical attributes to effectively cluster on the genre. Each genre entry comes as a list of values. For simplicity, we can just look at the first value in that list.
+
+Additionally, I want to see patterns with the release date. All of our release dates in the original data come in the format %Y-%m-%d, where %m is the month number, %d is the day of the month, and %Y is the year (4 digits).
+
+Thus, we can use R as follows to extract the year and genre of each column:
+
+```{r}
+# Use the stringr library to just get the first genre.
+library(stringr)
+film.genres <- str_extract(df$genres, "\\w+")
+
+film.datetimes <- as.Date(df$release_date, format='%Y-%m-%d')
+film.years <- as.numeric(format(film.datetimes, "%Y"))
+film.decades <- film.years - film.years %% 10
+
+# Remove the actual genres and release date columns from our df for clustering
+# solution from: https://stackoverflow.com/a/19072346
+df <- within(df, rm('genres'))
+df <- within(df, rm('release_date'))
+
+# Let's look at the unique values in our genres:
+sort(unique(film.genres))
+# And decades:
+sort(unique(film.decades))
+```
+
+Very cool, we have movies in 19 different genres, with 1 being `None`. Additionally, we have each decade from 1900s until 2020s.
+
+# K-Means Clustering
+
+First, load in the `factoextra` library. This will help us cluster visualization later.
+
+```{r}
+library(factoextra)
+```
+
+Next, let's scale our data, so the distance metrics in our clustering algorithm are scale-independent.
+
+```{r}
+scaled_film_data <- scale(df)
+head(scaled_film_data)
+```
+
+Before we perform our clustering, we need to find the optimal number of clusters using the Silhouette method.
+
+```{r}
+png(file="./imgs/clustering_ims/silhouette.png",
+width=1200, height=700)
+fviz_nbclust(scaled_film_data, kmeans, method="silhouette", k.max=20)
+dev.off()
+```
+
+As we can see here, the optimal number of clusters is 2. However, all `k` values in the 3-20 range have very similar Silhouette values, so we can experiment with those as well.
+
+Now that we've found the k to use, we can simply run k-means on our data. We'll do it on our optimal number of clusters, 2, as well as 5 (group roughly 4 genres together per cluster) and 20 (1 for each genre, including None):
+
+```{r}
+set.seed(10)
+k2 <- kmeans(scaled_film_data, centers=2, nstart=25)
+k5 <- kmeans(scaled_film_data, centers=5, nstart=25)
+k20 <- kmeans(scaled_film_data, centers=20, nstart=25)
+```
+
+And now we can visualize each of these:
+
+```{r}
+# First, set the rownames to the years + an index
+rownames(scaled_film_data) <- paste(film.genres, 1:dim(df)[1], sep="_")
+
+p2 <- fviz_cluster(list(data=scaled_film_data, cluster=k2$cluster)) + ggtitle("k=2")
+p5 <- fviz_cluster(list(data=scaled_film_data, cluster=k5$cluster)) + ggtitle("k=5")
+p20 <- fviz_cluster(list(data=scaled_film_data, cluster=k20$cluster)) + ggtitle("k=20")
+
+png(file="./imgs/clustering_ims/kmeans_2.png",
+width=1200, height=700)
+p2
+dev.off()
+
+png(file="./imgs/clustering_ims/kmeans_5.png",
+width=1200, height=700)
+p5
+dev.off()
+
+png(file="./imgs/clustering_ims/kmeans_20.png",
+width=1200, height=700)
+p20
+dev.off()
+```
+
+Alright, so this visualization is hard to look at with so many data points. But let's see how it separated our genres in the clusters.
+
+```{r}
+require(gridExtra)
+cluster1.genres <- film.genres[k2$cluster == 1]
+cluster2.genres <- film.genres[k2$cluster == 2]
+
+cluster1.years <- film.years[k2$cluster == 1]
+cluster2.years <- film.years[k2$cluster == 2]
+
+# This will save our image
+png(file="./imgs/clustering_ims/kmeans_clust_bar.png",
+width=1200, height=850)
+pg1 <- ggplot(data.frame(cluster1.genres), aes(x=cluster1.genres)) + geom_bar(fill="darkorange") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+py1 <- ggplot(data.frame(cluster1.years), aes(x=cluster1.years)) + geom_bar(fill="darkorange")
+
+pg2 <- ggplot(data.frame(cluster2.genres), aes(x=cluster2.genres)) + geom_bar(fill="blue") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+py2 <-ggplot(data.frame(cluster2.years), aes(x=cluster2.years)) + geom_bar(fill="blue")
+
+grid.arrange(pg1, py1, pg2, py2, ncol=2, nrow=2)
+dev.off()
+
+```
+
+Although this is a bit messy, we can notice a couple interesting patterns here (based off both the visualizations and the :
+
+-   Cluster 1 contains more data points overall
+
+-   Cluster 1 is the only one to capture Documentary, None, and TVMovie genres
+
+-   Cluster 2 has much more dispersed data across the two dimensions the cluster visualization has shown.
+
+-   Cluster 1 seems to just contain a majority of the movies from each year
+
+-   Cluster 2 has essentially "cherry-picked" a selection of a handful of movies across each year.
+
+My best guess is that the clustering algorithm is dividing into more popular vs. less popular movies. This makes sense with both the genres and years that we can see, as described in the points above.
+
+# Hierarchical Clustering
+
+Now that we've done K-Means, let's perform Hierarchical Clustering on the same data. We are going to be using the Cosine Similarity distance measure for this, which we can calculate for our dataset as follows:
+
+```{r}
+# Solution for Cosine Similarity from:
+# https://stackoverflow.com/a/52392058
+scaled_data_t <- t(scaled_film_data)
+
+cosine_dist = 1-crossprod(scaled_data_t) /(sqrt(colSums(scaled_data_t^2)%*%t(sqrt(colSums(scaled_data_t^2)))))
+
+# remove NaN's by 0
+cosine_dist[is.na(cosine_dist)] <- 0
+
+# create dist object
+cosine_dist <- as.dist(cosine_dist)
+```
+
+Great! Now that we've made an object containing the Cosine Similarity for our data, we can run hierarchical clustering using the `hclust()` function:
+
+```{r}
+hier_out <- hclust(cosine_dist, method ="complete")
+```
+
+And let's plot this data!
+
+```{r}
+png(file="./imgs/clustering_ims/dendrogram.png",
+width=1200, height=600)
+plot(hier_out)
+rect.hclust(hier_out, k=2, border=2:5)
+dev.off()
+```
+
+Very cool, but how does this compare to the K-Means Clustering? We can analyse this using the same method as before - look at the years and genres of our clusters:
+
+```{r}
+require(gridExtra)
+hier_clusters <- cutree(hier_out, k=2)
+hier_cluster1.genres <- film.genres[hier_clusters == 2]
+hier_cluster2.genres <- film.genres[hier_clusters == 1]
+
+hier_cluster1.years <- film.years[hier_clusters == 2]
+hier_cluster2.years <- film.years[hier_clusters == 1]
+
+# This will save our image
+png(file="./imgs/clustering_ims/hier_clust_bar.png",
+width=1200, height=850)
+pg1 <- ggplot(data.frame(hier_cluster1.genres), aes(x=hier_cluster1.genres)) + geom_bar(fill="darkorange") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+py1 <- ggplot(data.frame(hier_cluster1.years), aes(x=hier_cluster1.years)) + geom_bar(fill="darkorange")
+
+pg2 <- ggplot(data.frame(hier_cluster2.genres), aes(x=hier_cluster2.genres)) + geom_bar(fill="blue") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+py2 <-ggplot(data.frame(hier_cluster2.years), aes(x=hier_cluster2.years)) + geom_bar(fill="blue")
+
+grid.arrange(pg1, py1, pg2, py2, ncol=2, nrow=2)
+dev.off()
+```
