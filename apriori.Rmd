@@ -22,7 +22,7 @@ loaded_df <- read.csv("./data/imdb_cleaned_data.csv")
 
 ```{r}
 loaded_genres <- loaded_df$genres
-head(loaded_genres)
+head(loaded_genres, 10)
 ```
 
 Great! As we can see in the first few movies, there are lists of genres for each. However, some will have no genres listed (due to missing values in the dataset) as shown in the below example:
@@ -74,13 +74,26 @@ inspect(head(rule1, 5))
 ```
 
 ```{r}
+png(file="./imgs/arm_ims/grouped_plot.png",
+width=900, height=650, res=120)
 plot(rule1, method="grouped")
+dev.off()
 ```
 
 Additionally, we can look at the overall Confidence vs. Support on our rules:
 
 ```{r}
+png(file="./imgs/arm_ims/conf_support_plot.png",
+width=900, height=500, res=120)
 plot(rule1)
+dev.off()
+```
+
+```{r}
+png(file="./imgs/arm_ims/graph_plot.png",
+width=1200, height=650, res=120)
+plot(rule1, method="graph")
+dev.off()
 ```
 
 Now, let's look at the top 15 rules for support:
